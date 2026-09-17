@@ -4,7 +4,6 @@ import {
   ArrowDown,
   ArrowUp,
   CalendarDays,
-  ChevronRight,
   Factory,
   Flame,
   Leaf,
@@ -40,7 +39,6 @@ export default function Energy({ showDetail }: { showDetail: ShowDetail }) {
   const factor = periods[period].factor;
   const source = energyViews[mode];
   const activeIndex = hovered ?? selected;
-  const enterprise = activeIndex === null ? null : enterprises[activeIndex];
   const format = (v: number) => (v * factor).toFixed(2);
   const details = (index = activeIndex ?? 0) => {
     const target = enterprises[index];
@@ -327,50 +325,6 @@ export default function Energy({ showDetail }: { showDetail: ShowDetail }) {
             onSelect={setSelected}
             onHover={setHovered}
           />
-          {enterprise && (
-            <div
-              className="enterprise-popover"
-              style={{
-                left: `${enterprise.x}%`,
-                top: `${enterprise.y}%`,
-              }}
-              onMouseEnter={() => activeIndex !== null && setHovered(activeIndex)}
-              onMouseLeave={() => setHovered(null)}
-            >
-            <div className="popover-title">
-              <b>{enterprise.name}</b>
-              <span>● 运行中</span>
-            </div>
-            <p>
-              综合能源消费量（折标）<em>{format(enterprise.energy)} 万tce</em>
-            </p>
-            {[
-              ["用电量", enterprise.energy * 0.925, "亿kWh"],
-              ["天然气消费量", enterprise.energy * 0.029, "万Nm³"],
-              ["热力消费量", enterprise.energy * 0.023, "万GJ"],
-              ["其他能源消费量", enterprise.energy * 0.022, "万tce"],
-            ].map(([label, v, unit], i) => {
-              const Icon = [Zap, Flame, Waves, Factory][i];
-              return (
-                <p key={label}>
-                  <Icon size={14} />
-                  {label}
-                  <span>
-                    {format(Number(v))} {unit}
-                  </span>
-                </p>
-              );
-            })}
-            <p>
-              <Leaf size={14} />
-              绿电占比<em>{enterprise.green}%</em>
-            </p>
-            <button className="more" onClick={() => details()}>
-              查看详情
-              <ChevronRight size={15} />
-            </button>
-            </div>
-          )}
         </div>
         <aside className="energy-right">
           <Panel title="园区综合能耗趋势" extra="本年 · 折标万tce">

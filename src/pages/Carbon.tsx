@@ -353,15 +353,14 @@ export default function Carbon({ showDetail }: { showDetail: ShowDetail }) {
           <div className="heat-legend">
             <b>碳排放强度（tCO₂/tce）</b>
             {[
-              ["all", "全部", "#77c8ff"],
               ["high", "高（≥0.40）", "#ff5d60"],
               ["medium", "中高（0.35—0.40）", "#ffcc56"],
-              ["low", "低（<0.35）", "#41dbbd"],
+              ["low", "低（<0.35）", "#4ba8ff"],
             ].map(([key, text, color]) => (
               <button
                 key={key}
                 className={level === key ? "active" : ""}
-                onClick={() => setLevel(key)}
+                onClick={() => setLevel(level === key ? "all" : key)}
                 aria-pressed={level === key}
               >
                 <i style={{ background: color }} />

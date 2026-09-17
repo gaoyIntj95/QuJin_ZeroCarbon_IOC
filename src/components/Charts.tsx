@@ -1,6 +1,29 @@
-import { useId, useState } from "react";
+import { init, use, type ECharts } from "echarts/core";
+import { LineChart as EChartsLineChart, PieChart } from "echarts/charts";
+import {
+  GridComponent,
+  MarkPointComponent,
+  TooltipComponent,
+} from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { chartTheme } from "../theme";
+
+use([EChartsLineChart, PieChart, GridComponent, MarkPointComponent, TooltipComponent, CanvasRenderer]);
 
 export type Slice = { name: string; value: number; color: string };
+
+function useChartResize(chartRef: RefObject<ECharts | null>, hostRef: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const host = hostRef.current;
+    const chart = chartRef.current;
+    if (!host || !chart) return;
+    const observer = new ResizeObserver(() => chart.resize());
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [chartRef, hostRef]);
+}
+
 export function Donut({
   data,
   value,
@@ -12,67 +35,77 @@ export function Donut({
   label: string;
   onSelect?: (slice: Slice) => void;
 }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<ECharts | null>(null);
   const [hover, setHover] = useState<Slice | null>(null);
-  const total = data.reduce((s, d) => s + d.value, 0);
-  let accumulated = 0;
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const chart = init(host);
+    chartRef.current = chart;
+    chart.setOption({
+      animationDuration: 750,
+      animationEasing: "cubicOut",
+      tooltip: {
+        trigger: "item",
+        backgroundColor: chartTheme.tooltipTheme.background,
+        borderColor: chartTheme.tooltipTheme.border,
+        textStyle: { color: chartTheme.tooltipTheme.text, fontSize: 11 },
+        formatter: (params: { name: string; value: number; percent: number }) =>
+          `${params.name}<br/><strong>${params.value}（${params.percent.toFixed(1)}%）</strong>`,
+      },
+      series: [
+        {
+          type: "pie",
+          radius: ["65%", "85%"],
+          center: ["50%", "50%"],
+          avoidLabelOverlap: true,
+          label: { show: false },
+          labelLine: { show: false },
+          itemStyle: {
+            borderColor: "#03182d",
+            borderWidth: 2,
+            borderRadius: 3,
+          },
+          emphasis: {
+            scale: true,
+            scaleSize: 5,
+            itemStyle: { shadowBlur: 12, shadowColor: "#46d9e166" },
+          },
+          data: data.map((slice) => ({
+            name: slice.name,
+            value: slice.value,
+            itemStyle: { color: slice.color },
+          })),
+        },
+      ],
+    });
+    chart.on("mouseover", (params: { dataIndex: number }) => setHover(data[params.dataIndex] ?? null));
+    chart.on("mouseout", () => setHover(null));
+    chart.on("click", (params: { dataIndex: number }) => {
+      const slice = data[params.dataIndex];
+      if (slice) onSelect?.(slice);
+    });
+    return () => {
+      chart.dispose();
+      chartRef.current = null;
+    };
+  }, [data, onSelect]);
+  useChartResize(chartRef, hostRef);
+
+  const total = data.reduce((sum, slice) => sum + slice.value, 0);
   return (
-    <div className="donut">
-      <svg viewBox="0 0 160 160" role="group" aria-label={`${label} ${value}`}>
-        <circle
-          cx="80"
-          cy="80"
-          r="61"
-          fill="none"
-          stroke="#0c2944"
-          strokeWidth="23"
-        />
-        {data.map((d) => {
-          const length = (d.value / total) * 383.27;
-          const offset = -accumulated;
-          accumulated += length;
-          return (
-            <circle
-              key={d.name}
-              cx="80"
-              cy="80"
-              r="61"
-              fill="none"
-              stroke={d.color}
-              strokeWidth={hover?.name === d.name ? 28 : 23}
-              strokeDasharray={`${length - 1} ${384 - length}`}
-              strokeDashoffset={offset}
-              transform="rotate(-90 80 80)"
-              onMouseEnter={() => setHover(d)}
-              onMouseLeave={() => setHover(null)}
-              onFocus={() => setHover(d)}
-              onBlur={() => setHover(null)}
-              onClick={() => onSelect?.(d)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSelect?.(d);
-                }
-              }}
-              tabIndex={0}
-              role="button"
-              aria-label={`${d.name} ${d.value}`}
-            >
-              <title>
-                {d.name}：{d.value}（{((d.value / total) * 100).toFixed(1)}%）
-              </title>
-            </circle>
-          );
-        })}
-      </svg>
+    <div className="donut" role="img" aria-label={`${label} ${value}`}>
+      <div ref={hostRef} className="echart-canvas" />
       <div className="donut-center">
         <small>{hover?.name ?? label}</small>
-        <strong>
-          {hover ? `${((hover.value / total) * 100).toFixed(1)}%` : value}
-        </strong>
+        <strong>{hover ? `${((hover.value / total) * 100).toFixed(1)}%` : value}</strong>
       </div>
     </div>
   );
 }
+
 type Line = {
   name: string;
   color: string;
@@ -80,6 +113,7 @@ type Line = {
   unit?: string;
   displayScale?: number;
 };
+
 export function LineChart({
   lines,
   labels,
@@ -93,153 +127,100 @@ export function LineChart({
   unit: string;
   onPoint?: (index: number) => void;
 }) {
-  const [hover, setHover] = useState<number | null>(null);
   const [hidden, setHidden] = useState<string[]>([]);
-  const uid = useId().replace(/:/g, "");
-  const x = (i: number) => 36 + (i * 356) / (labels.length - 1);
-  const y = (v: number) => 184 - (v / max) * 150;
+  const hostRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<ECharts | null>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const chart = init(host);
+    chartRef.current = chart;
+    chart.setOption({
+      animationDuration: 800,
+      animationEasing: "cubicOut",
+      grid: { left: 34, right: 9, top: 12, bottom: 22 },
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: chartTheme.tooltipTheme.background,
+        borderColor: chartTheme.tooltipTheme.border,
+        textStyle: { color: chartTheme.tooltipTheme.text, fontSize: 11 },
+        axisPointer: { type: "line", lineStyle: { color: chartTheme.lineTrend.crosshair, type: "dashed" } },
+        formatter: (params: Array<{ seriesName: string; data: number; color: string; axisValue: string }>) => {
+          const title = params[0]?.axisValue ?? "";
+          return [title, ...params.map((item) => {
+            const line = lines.find((entry) => entry.name === item.seriesName);
+            const scaled = line?.displayScale ? item.data / line.displayScale : item.data;
+            return `<span style="color:${item.color}">●</span> ${item.seriesName} <strong>${Number(scaled).toFixed(2)} ${line?.unit ?? unit}</strong>`;
+          })].join("<br/>");
+        },
+      },
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: labels,
+        axisLine: { lineStyle: { color: "#20506a" } },
+        axisTick: { show: false },
+        axisLabel: { color: chartTheme.lineTrend.axis, fontSize: 10 },
+      },
+      yAxis: {
+        type: "value",
+        max,
+        splitNumber: 5,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: chartTheme.lineTrend.axis, fontSize: 10 },
+        splitLine: { lineStyle: { color: chartTheme.lineTrend.grid, opacity: 0.38 } },
+      },
+      series: lines.map((line) => ({
+        name: line.name,
+        type: "line",
+        smooth: true,
+        showSymbol: true,
+        symbol: "circle",
+        symbolSize: 5,
+        data: line.data,
+        itemStyle: { color: line.color },
+        lineStyle: { color: line.color, width: chartTheme.lineTrend.lineWidth, shadowBlur: 5, shadowColor: line.color },
+        areaStyle: { color: line.color, opacity: chartTheme.lineTrend.areaOpacity },
+        emphasis: { focus: "series", symbolSize: 8 },
+        markPoint: {
+          symbol: "circle",
+          symbolSize: 8,
+          data: [{ coord: [labels.length - 1, line.data[line.data.length - 1]] }],
+          itemStyle: { color: line.color, shadowBlur: 10, shadowColor: line.color },
+          label: { show: false },
+        },
+        silent: hidden.includes(line.name),
+      })),
+    });
+    chart.on("click", (params: { dataIndex?: number }) => {
+      if (typeof params.dataIndex === "number") onPoint?.(params.dataIndex);
+    });
+    return () => {
+      chart.dispose();
+      chartRef.current = null;
+    };
+  }, [hidden, labels, lines, max, onPoint, unit]);
+  useChartResize(chartRef, hostRef);
+
   return (
     <div className="line-chart">
       <div className="chart-legend">
-        {lines.map((l) => (
+        {lines.map((line) => (
           <button
-            key={l.name}
-            className={hidden.includes(l.name) ? "muted-series" : ""}
-            onClick={() =>
-              setHidden((h) =>
-                h.includes(l.name)
-                  ? h.filter((n) => n !== l.name)
-                  : [...h, l.name],
-              )
-            }
-            aria-pressed={!hidden.includes(l.name)}
+            type="button"
+            key={line.name}
+            className={hidden.includes(line.name) ? "muted-series" : ""}
+            onClick={() => setHidden((current) => current.includes(line.name) ? current.filter((name) => name !== line.name) : [...current, line.name])}
+            aria-pressed={!hidden.includes(line.name)}
           >
-            <i style={{ background: l.color }} />
-            {l.name}
+            <i style={{ background: line.color }} />
+            {line.name}
           </button>
         ))}
       </div>
-      <svg
-        viewBox="0 0 410 215"
-        preserveAspectRatio="none"
-        aria-label={`${unit}趋势图`}
-        role="group"
-      >
-        <defs>
-          {lines.map((l, i) => (
-            <linearGradient
-              key={l.name}
-              id={`${uid}-${i}`}
-              x1="0"
-              y1="0"
-              x2="0"
-              y2="1"
-            >
-              <stop offset="0%" stopColor={l.color} stopOpacity=".17" />
-              <stop offset="100%" stopColor={l.color} stopOpacity="0" />
-            </linearGradient>
-          ))}
-        </defs>
-        {Array.from({ length: 6 }, (_, i) => (
-          <g key={i}>
-            <line
-              x1="36"
-              x2="392"
-              y1={y((i * max) / 5)}
-              y2={y((i * max) / 5)}
-              stroke="#17415e"
-              strokeOpacity=".5"
-            />
-            <text x="29" y={y((i * max) / 5) + 4} textAnchor="end">
-              {Math.round((i * max) / 5)}
-            </text>
-          </g>
-        ))}
-        {labels.map((l, i) => (
-          <text key={l} x={x(i)} y="207" textAnchor="middle">
-            {l}
-          </text>
-        ))}
-        {lines.map((l, index) =>
-          hidden.includes(l.name) ? null : (
-            <g key={l.name}>
-              <path
-                d={`M ${x(0)} 184 ${l.data.map((v, i) => `L ${x(i)} ${y(v)}`).join(" ")} L ${x(l.data.length - 1)} 184 Z`}
-                fill={`url(#${uid}-${index})`}
-              />
-              <polyline
-                points={l.data.map((v, i) => `${x(i)},${y(v)}`).join(" ")}
-                fill="none"
-                stroke={l.color}
-                strokeWidth="2.2"
-              />
-              {l.data.map((v, i) => (
-                <circle
-                  key={i}
-                  cx={x(i)}
-                  cy={y(v)}
-                  r={hover === i ? 4 : 2.7}
-                  fill={l.color}
-                />
-              ))}
-            </g>
-          ),
-        )}
-        {hover !== null && (
-          <line
-            x1={x(hover)}
-            x2={x(hover)}
-            y1="25"
-            y2="185"
-            stroke="#78ccff"
-            strokeDasharray="4 4"
-          />
-        )}
-        {labels.map((l, i) => (
-          <rect
-            key={l}
-            x={x(i) - 12}
-            y="23"
-            width="24"
-            height="168"
-            fill="transparent"
-            tabIndex={0}
-            role="button"
-            aria-label={`${l} ${lines.map((line) => `${line.name}${line.data[i]}`).join("，")}`}
-            onMouseEnter={() => setHover(i)}
-            onMouseLeave={() => setHover(null)}
-            onFocus={() => setHover(i)}
-            onBlur={() => setHover(null)}
-            onClick={() => onPoint?.(i)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onPoint?.(i);
-              }
-            }}
-          />
-        ))}
-      </svg>
-      {hover !== null && (
-        <div
-          className="chart-tooltip"
-          style={{ left: `${Math.min((hover / labels.length) * 80 + 8, 53)}%` }}
-        >
-          <b>{labels[hover]}</b>
-          {lines
-            .filter((l) => !hidden.includes(l.name))
-            .map((l) => (
-              <span key={l.name}>
-                <i style={{ background: l.color }} />
-                {l.name}
-                <strong>
-                  {+(l.data[hover] / (l.displayScale ?? 1)).toFixed(2)}{" "}
-                  {l.unit ?? unit}
-                </strong>
-              </span>
-            ))}
-        </div>
-      )}
+      <div ref={hostRef} className="echart-canvas line-echart" role="img" aria-label={`${unit}趋势图`} />
     </div>
   );
 }

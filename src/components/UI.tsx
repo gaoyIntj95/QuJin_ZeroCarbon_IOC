@@ -7,6 +7,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, X, type LucideIcon } from "lucide-react";
+import { visualTheme } from "../theme";
 
 export type ShowDetail = (title: string, content: ReactNode) => void;
 export function CompactSelect({
@@ -126,7 +127,7 @@ export function Metric({
   value,
   unit,
   note,
-  color = "#6cd1ff",
+  color = visualTheme.colors.power,
   onClick,
 }: {
   icon: LucideIcon;
@@ -137,11 +138,41 @@ export function Metric({
   color?: string;
   onClick?: () => void;
 }) {
+  const [displayValue, setDisplayValue] = useState("0");
+
+  useEffect(() => {
+    if (!/\d/.test(value)) {
+      setDisplayValue(value);
+      return;
+    }
+    let frame = 0;
+    const startedAt = performance.now();
+    const duration = 720;
+    const tick = (now: number) => {
+      const progress = Math.max(0, Math.min(1, (now - startedAt) / duration));
+      const eased = 1 - (1 - progress) ** 3;
+      const nextValue = value.replace(/-?\d+(?:\.\d+)?/g, (match) => {
+        const target = Number(match);
+        const precision = (match.split(".")[1] ?? "").length;
+        const current = (target * eased).toFixed(precision);
+        const result = precision ? current : String(Math.round(Number(current)));
+        return result;
+      });
+      setDisplayValue(nextValue);
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+
   return (
     <button
       className="metric"
       onClick={onClick}
-      style={{ "--accent": color } as CSSProperties}
+      style={{
+        "--accent": color,
+        "--accent-soft": `${color}22`,
+      } as CSSProperties}
     >
       <span className="metric-icon">
         <Icon size={39} strokeWidth={1.7} />
@@ -149,7 +180,7 @@ export function Metric({
       <span className="metric-copy">
         <span className="metric-label">{label}</span>
         <span className="metric-value">
-          {value}
+          {displayValue}
           <small>{unit}</small>
         </span>
         <span className="metric-note">{note}</span>
