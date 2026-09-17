@@ -32,6 +32,10 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+      - name: Ensure Cesium assets are published at the project root
+        run: |
+          mkdir -p dist/cesium
+          cp -R node_modules/cesium/Build/Cesium/. dist/cesium/
       - name: Support SPA deep links
         run: |
           cp dist/index.html dist/404.html

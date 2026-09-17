@@ -31,6 +31,7 @@ const PARK_CONTEXT_RECTANGLE = C.Rectangle.fromDegrees(
   25.5582,
 );
 const PARK_MAX_ZOOM_DISTANCE = 6200;
+const PARK_CONTEXT_IMAGE = `${import.meta.env.BASE_URL}park-orthophoto-context.png`;
 type Props = {
   mode: ParkViewerMode;
   energyMode?: EnergyMode;
@@ -187,10 +188,10 @@ export function CesiumParkViewer({
       if (mode === "carbon") addCarbonHeatLayer(v, data);
       if (!tilesUrl) {
         void Promise.all([
-          C.SingleTileImageryProvider.fromUrl("/park-orthophoto-context.png", {
+          C.SingleTileImageryProvider.fromUrl(PARK_CONTEXT_IMAGE, {
             rectangle: PARK_CONTEXT_RECTANGLE,
           }),
-          C.SingleTileImageryProvider.fromUrl("/park-orthophoto-context.png", {
+          C.SingleTileImageryProvider.fromUrl(PARK_CONTEXT_IMAGE, {
             // Keep the detailed image aligned with the source image while the
             // wider copy provides the natural forest/water perimeter.
             rectangle: PARK_IMAGE_RECTANGLE,
