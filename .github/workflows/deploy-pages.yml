@@ -33,7 +33,12 @@ jobs:
       - name: Build
         run: npm run build
       - name: Support SPA deep links
-        run: cp dist/index.html dist/404.html
+        run: |
+          cp dist/index.html dist/404.html
+          mkdir -p dist/overview dist/energy-flow dist/carbon-trend
+          cp dist/index.html dist/overview/index.html
+          cp dist/index.html dist/energy-flow/index.html
+          cp dist/index.html dist/carbon-trend/index.html
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
